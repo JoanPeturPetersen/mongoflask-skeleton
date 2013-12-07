@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+{% if user.id is defined %}
+  <h1>Hi {{ user.name }}</h1>
+  <p>
+  Your current public id is '{{ user.id }}'.
+  </p>
+{% else %}
+  <h1>You're not logged in.</h1>
+{% endif %}
+
+{% endblock %}
+

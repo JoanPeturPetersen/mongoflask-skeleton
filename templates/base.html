@@ -1,0 +1,18 @@
+<html>
+  <head>
+    <title>Mongodbflask session skeleton</title>
+  </head>
+  <body>
+    <div>Session: 
+      <a href="/">Home</a>
+      <a href="/loginreq">Login required</a>
+      {% if user.id is defined %}
+      <a href="/logout">Logout</a>
+      {% else %}
+      <a href="/login">Login</a>
+      {% endif %}
+    </div>
+    <hr>
+    {% block content %}{% endblock %}
+  </body>
+</html>

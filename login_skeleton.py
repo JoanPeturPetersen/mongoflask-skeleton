@@ -8,7 +8,8 @@ from pymongo import Connection
 from werkzeug.security import generate_password_hash, \
      check_password_hash 
 import random, string
-import datetime
+import datetime     
+from flask import flash, url_for
 
 
 # Application settings:
@@ -32,6 +33,8 @@ users = db.users
 # Session config:
 max_session_releases = 3  # Maximum number of valid secrets per user
 max_secret_age_hours = 24.0  # Time for an secret to expire
+min_login_retry_dur = 10  # Minimum time that must pass before a new
+                          # attampt.
 
 # Misc:
 DEBUG = True
@@ -169,10 +172,23 @@ def login():
         # We should clean userid first?
         user_doc = users.find_one({"username": username})
         if not user_doc is None:
+            # Make sure enough time has passed:
+            last_attempt = None
+            if user_doc.has_key('last_attempt'):
+                last_attempt = user_doc['last_attempt']
+            if not last_attempt is None:
+                if last_attempt + datetime.timedelta(seconds=
+                    min_login_retry_dur) > datetime.datetime.utcnow():
+                        flash('Please wait a while...')
+                        return redirect(url_for('login'))
+            users.update({u'username': username}, {"$set": 
+                {"last_attempt": datetime.datetime.utcnow()}})
             if do_login_user(user_doc, password):
                 return redirect('/')
             else:
-                return "Failed."
+                return "Authentication failed."
+        else:
+            return "No user."
     else:
         return render('login.html')
 
