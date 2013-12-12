@@ -10,7 +10,7 @@ from werkzeug.security import generate_password_hash, \
 import random, string
 import datetime     
 from flask import flash, url_for
-
+from forms import LoginForm
 
 # Application settings:
 app = Flask(__name__)
@@ -18,6 +18,7 @@ app.secret_key = 'CHANGE ME'  # Set the secret key, it is also used by
                               # LoginManager.
 app.debug = True              # Set False before deployment
  
+
 # Login manager settings:
 login_manager = LoginManager()  
 login_manager.session_protection = "strong"
@@ -38,6 +39,11 @@ min_login_retry_dur = 10  # Minimum time that must pass before a new
 
 # Misc:
 DEBUG = True
+RECAPTCHA_PUBLIC_KEY = "6LeYIbsSAAAAACRPIllxA7wvXjIE411PfdB2gt2J"  
+    # required A public key.
+RECAPTCHA_PRIVATE_KEY = "6LeYIbsSAAAAAJezaIq3Ft_hSTo0YtyeFG-JgRtu"  
+    # required A private key.
+
 
 class User(UserMixin):
     """This class represents a user. We'll populate it with data from
@@ -56,30 +62,8 @@ def check_password(user_doc, password):
       
 
 def render(*args, **kwargs):
-    kwargs['user'] = current_user
+    kwargs['user'] = current_user.__dict__
     return render_template(*args, **kwargs)
-
-@app.route('/')
-def hello():
-    return render('index.html')
-
-@app.route('/logout')
-@login_required
-def logout():
-    """The sessions shared secret will also be deleted from the
-    database. 
-    """
-    user = users.find_one({u'username': current_user.name})
-    secrets = user['secrets']
-    remove_us = filter(lambda secret:
-            secret['value']==current_user.secret, secrets)
-    for rm in remove_us:
-        secrets.remove(rm)
-        if DEBUG:
-            print "Removed secret %s for user %s." % (rm['value'], 
-                    current_user.name) 
-    logout_user()
-    return redirect('/')
 
 
 @login_manager.user_loader
@@ -148,7 +132,6 @@ def generate_public_userid(user_doc):
     return public_id
 
 
-
 def do_login_user(user_doc, password):
     """
     Returns true if user is successfully logged in.
@@ -163,6 +146,9 @@ def do_login_user(user_doc, password):
     else:
         print "Failed to login user: " + public_userid
         return False
+
+
+# Routes ----------------------------------------------------------------
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -192,14 +178,44 @@ def login():
     else:
         return render('login.html')
 
+
+@app.route('/logout')
+@login_required
+def logout():
+    """The sessions shared secret will also be deleted from the
+    database. 
+    """
+    user = users.find_one({u'username': current_user.name})
+    secrets = user['secrets']
+    remove_us = filter(lambda secret:
+            secret['value']==current_user.secret, secrets)
+    for rm in remove_us:
+        secrets.remove(rm)
+        if DEBUG:
+            print "Removed secret %s for user %s." % (rm['value'], 
+                    current_user.name) 
+    logout_user()
+    return redirect('/')
+ 
+
 @app.route('/loginreq')
 @login_required
 def login_req():
+    """The login_req decorator will only allow logged in users to access
+    this method.
+    """
     return render('login_req.html')
 
+
+@app.route('/')
+def hello():
+    return render('index.html')
+ 
+
 if __name__ == '__main__':
-   login_manager.init_app(app)
-   app.run()
+    login_manager.init_app(app)
+    app.config.from_object(__name__)
+    app.run()
 
 
 

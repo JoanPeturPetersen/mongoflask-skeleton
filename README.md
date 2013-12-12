@@ -9,6 +9,13 @@ Requirements
 ------------
 Flask, a MongoDB server, and PyMongo. The code runs on Python 2.7, maybe other vesions too.
 
+Trying it out
+-------------
+* Start a local MongoDB server
+* Create some data by running `python db_demo_populate.py GO`
+* Start the web server `python login_skeleton.py`
+* Go to `127.0.0.1:5000/` in our browser
+
 Features
 --------
 * Limits number of login tries with a defined duration, as to prevent automatic password guessing.
