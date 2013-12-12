@@ -15,6 +15,7 @@ Trying it out
 * Create some data by running `python db_demo_populate.py GO`
 * Start the web server `python login_skeleton.py`
 * Go to `127.0.0.1:5000/` in our browser
+* Try to log in as `Stan` with password `123`.
 
 Features
 --------
