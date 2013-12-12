@@ -10,7 +10,6 @@ from werkzeug.security import generate_password_hash, \
 import random, string
 import datetime     
 from flask import flash, url_for
-from forms import LoginForm
 
 # Application settings:
 app = Flask(__name__)
