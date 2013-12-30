@@ -19,9 +19,7 @@ if __name__=='__main__':
     users = db.users
 
     # Delete all users
-    usr_sel = users.find()
-    for user in usr_sel:
-        users.remove(user)
+    users.drop()
 
     users.insert({'username': 'Stan', 'saltedpw':pwh('123')})
     users.insert({'username': 'Kyle', 'saltedpw':pwh('123')})
