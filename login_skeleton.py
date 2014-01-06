@@ -1,3 +1,11 @@
+#
+# Remember that if you don't enable SSL (HTTPS), then all password will
+# be sent in plaintext.
+#
+# Also remember to change 'app.secret_key' and reCAPTCHA settings if
+# used.
+#
+
 from flask import Flask
 from flask import request
 from flask import render_template
@@ -10,6 +18,8 @@ from werkzeug.security import generate_password_hash, \
 import random, string
 import datetime     
 from flask import flash, url_for
+from forms import LoginForm
+from forms import RECAPTCHA_Form
 
 # Application settings:
 app = Flask(__name__)
@@ -38,6 +48,11 @@ min_login_retry_dur = 10  # Minimum time that must pass before a new
 
 # Misc:
 DEBUG = True
+
+# reCAPTCHA setting:
+ENABLE_RECAPTCHA = True  # If true, then the user will be taken to a
+  #  reCAPTCH page instead of being asked to wait when trying to login too
+  #  often.
 RECAPTCHA_PUBLIC_KEY = "6LeYIbsSAAAAACRPIllxA7wvXjIE411PfdB2gt2J"  
     # required A public key.
 RECAPTCHA_PRIVATE_KEY = "6LeYIbsSAAAAAJezaIq3Ft_hSTo0YtyeFG-JgRtu"  
@@ -149,11 +164,33 @@ def do_login_user(user_doc, password):
 
 # Routes ----------------------------------------------------------------
 
+@app.route('/login/captcha', methods=['POST'])
+def login_captcha():
+    capform = RECAPTCHA_Form()
+    if capform.validate_on_submit():
+        username = capform.username.data
+        password = capform.password.data   
+        user_doc = users.find_one({"username": username})
+        if not user_doc is None:                      
+            if do_login_user(user_doc, password):
+                return redirect(url_for('index'))
+            else:
+                flash('Authentication failed')
+                return redirect(url_for('login_wtf'))
+        else:
+            # No user with that username
+            flash('Authentication failed');
+            return redirect(url_for('login_wtf')) 
+    else:
+        return render('recaptcha.html', form=capform)
+
+
 @app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+def login_wtf():
+    form = LoginForm()
+    if form.validate_on_submit():
+        username = form.username.data
+        password = form.password.data
         # We should clean userid first?
         user_doc = users.find_one({"username": username})
         if not user_doc is None:
@@ -164,18 +201,28 @@ def login():
             if not last_attempt is None:
                 if last_attempt + datetime.timedelta(seconds=
                     min_login_retry_dur) > datetime.datetime.utcnow():
+                    if ENABLE_RECAPTCHA:
+                        capform = RECAPTCHA_Form()
+                        capform.username.data = username
+                        capform.password.data = password
+                        return render('recaptcha.html', form=capform) 
+                    else:
                         flash('Please wait a while...')
                         return redirect(url_for('login'))
-            users.update({u'username': username}, {"$set": 
+            users.update({u'username': username}, {"$set":
                 {"last_attempt": datetime.datetime.utcnow()}})
             if do_login_user(user_doc, password):
-                return redirect('/')
+                return redirect(url_for('index'))
             else:
-                return "Authentication failed."
+                # No user with that username
+                flash('Authentication failed');
+                return redirect(url_for('login_wtf'))   
         else:
-            return "No user."
+            # No user with that username
+            flash('Authentication failed');
+            return redirect(url_for('login_wtf'))   
     else:
-        return render('login.html')
+        return render('loginwtf.html', form=form)
 
 
 @app.route('/logout')
@@ -187,7 +234,7 @@ def logout():
     user = users.find_one({u'username': current_user.name})
     secrets = user['secrets']
     remove_us = filter(lambda secret:
-            secret['value']==current_user.secret, secrets)
+            secret['value'] == current_user.secret, secrets)
     for rm in remove_us:
         secrets.remove(rm)
         if DEBUG:
@@ -207,7 +254,7 @@ def login_req():
 
 
 @app.route('/')
-def hello():
+def index():
     return render('index.html')
  
 

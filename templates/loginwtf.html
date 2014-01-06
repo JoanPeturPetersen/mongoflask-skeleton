@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+    <!-- from: http://flask.pocoo.org/docs/patterns/flashing/ -->
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class=flashes>
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %} 
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+  <form method="POST" action="{{ url_for('login_wtf') }}">
+      {{ form.hidden_tag() }}
+      <p>{{ form.username.label }} {{ form.username(size=20) }}</p>
+      <p>{{ form.password.label }} {{ form.password(size=20) }}</p>
+      <input type="submit" value="Go">
+  </form>
+
+{% endblock %}

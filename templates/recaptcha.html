@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+    <p>Several attempts have been done recently logging in to this
+    account. Could you therefore be so kind to also answer this
+    reCAPTCHA question?
+    </p>
+
+    <!-- from: http://flask.pocoo.org/docs/patterns/flashing/ -->
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class=flashes>
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %} 
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+  <form method="POST" action="{{ url_for('login_captcha') }}">
+      {{ form.hidden_tag() }}
+      {{ form.username(size=20) }}
+      {{ form.password(size=20) }}
+      <p>{% for error in form.recaptcha.errors %}
+                    {{ error }}
+      {% endfor %}
+      {{ form.recaptcha }}</p>
+      <input type="submit" value="Go">
+  </form>
+
+{% endblock %}
