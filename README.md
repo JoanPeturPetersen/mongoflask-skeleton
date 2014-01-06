@@ -25,9 +25,10 @@ Features
 
 Missing features
 ----------------
-The skeleton does not handle bruteforce, dictionary, or similar login attacks well.
-Only as simple preliminary prevention has been implemented: A username is only allowed to try to log in at a maximum rate.
-It is a problem that it is only based upon the username, as someone who knows a username, could lock that user out of the system, by continously trying to log in.
-A smarter system has to be implemented.
+The skeleton does handle bruteforce, dictionary, or similar login attacks to some extent.
+As a preliminary countermeasure a username is only allowed to try to log in at a maximum rate. If this 
+rate is exceeded, then the user cap be asked to answer a reCAPTCHA question (if enabled). The CAPTCHA
+was introduced, so that a bruteforce attack should not be able to lock out a user. This can happen if
+we only allow a user to try a certain rate of paswords.
 
 Secure redirects.
