@@ -13,13 +13,15 @@ from flask import redirect
 from flask.ext.login import LoginManager, login_user, logout_user
 from flask.ext.login import UserMixin, current_user, login_required
 from pymongo import Connection
-from werkzeug.security import generate_password_hash, \
-     check_password_hash 
+#from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash 
 import random, string
 import datetime     
 from flask import flash, url_for
+from urlparse import urljoin
 from forms import LoginForm
 from forms import RECAPTCHA_Form
+from flask import session
 
 # Application settings:
 app = Flask(__name__)
@@ -161,33 +163,28 @@ def do_login_user(user_doc, password):
         print "Failed to login user: " + public_userid
         return False
 
-
+def get_next_url():
+    next_url = url_for('index')
+    target = session.pop('next', None)
+    if target is not None:
+            # Make sure it is on this server
+            next_url = urljoin(request.host_url, target)
+            print "next_url: ", next_url 
+    session['next'] = request.args.get('next')
+    return next_url
+ 
 # Routes ----------------------------------------------------------------
 
-@app.route('/login/captcha', methods=['POST'])
-def login_captcha():
-    capform = RECAPTCHA_Form()
-    if capform.validate_on_submit():
-        username = capform.username.data
-        password = capform.password.data   
-        user_doc = users.find_one({"username": username})
-        if not user_doc is None:                      
-            if do_login_user(user_doc, password):
-                return redirect(url_for('index'))
-            else:
-                flash('Authentication failed')
-                return redirect(url_for('login_wtf'))
-        else:
-            # No user with that username
-            flash('Authentication failed');
-            return redirect(url_for('login_wtf')) 
-    else:
-        return render('recaptcha.html', form=capform)
-
-
+                               
 @app.route('/login', methods=['GET', 'POST'])
 def login_wtf():
+    next_url = get_next_url()
     form = LoginForm()
+    capform = RECAPTCHA_Form() 
+    is_cap = False
+    if 'recaptcha_response_field' in request.form.keys():
+        is_cap = True
+        form = capform
     if form.validate_on_submit():
         username = form.username.data
         password = form.password.data
@@ -198,7 +195,7 @@ def login_wtf():
             last_attempt = None
             if user_doc.has_key('last_attempt'):
                 last_attempt = user_doc['last_attempt']
-            if not last_attempt is None:
+            if (last_attempt is not None) and (not is_cap):
                 if last_attempt + datetime.timedelta(seconds=
                     min_login_retry_dur) > datetime.datetime.utcnow():
                     if ENABLE_RECAPTCHA:
@@ -212,17 +209,21 @@ def login_wtf():
             users.update({u'username': username}, {"$set":
                 {"last_attempt": datetime.datetime.utcnow()}})
             if do_login_user(user_doc, password):
-                return redirect(url_for('index'))
+                return redirect(next_url)
             else:
-                # No user with that username
-                flash('Authentication failed');
-                return redirect(url_for('login_wtf'))   
+                flash('Authentication failed A')
+                return render('loginwtf.html', form=LoginForm())
+                #return redirect(url_for('login_wtf',
+                #    next=request.args.get('next')))
         else:
             # No user with that username
             flash('Authentication failed');
-            return redirect(url_for('login_wtf'))   
+            return render('loginwtf.html', form=form)   
     else:
-        return render('loginwtf.html', form=form)
+        if is_cap:
+            return render('recaptcha.html', form=capform)
+        else:
+            return render('loginwtf.html', form=form)
 
 
 @app.route('/logout')

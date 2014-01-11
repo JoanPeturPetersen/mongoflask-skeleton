@@ -18,7 +18,7 @@
       {% endif %}
     {% endwith %}
 
-  <form method="POST" action="{{ url_for('login_captcha') }}">
+  <form method="POST" action="">
       {{ form.hidden_tag() }}
       {{ form.username(size=20) }}
       {{ form.password(size=20) }}
