@@ -1,4 +1,6 @@
 from pymongo import Connection
+from pymongo import ASCENDING
+from pymongo.errors import DuplicateKeyError
 from werkzeug.security import generate_password_hash as pwh
 import sys
 
@@ -20,12 +22,17 @@ if __name__=='__main__':
 
     # Delete all users
     users.drop()
-
-    users.insert({'username': 'Stan', 'saltedpw':pwh('123')})
-    users.insert({'username': 'Kyle', 'saltedpw':pwh('123')})
-    users.insert({'username': 'Eric', 'saltedpw':pwh('321')})
-    users.insert({'username': 'Kenny', 'saltedpw':pwh('321')})
-
+    users.ensure_index( [("username", ASCENDING)], unique=True )
+    #unique:true, dropDups : true
+    users.insert({'username': 'Stan', 'saltedpw':pwh('123')}, safe=True)
+    users.insert({'username': 'Kyle', 'saltedpw':pwh('123')}, safe=True)
+    users.insert({'username': 'Eric', 'saltedpw':pwh('321')}, safe=True)
+    users.insert({'username': 'Kenny', 'saltedpw':pwh('321')}, safe=True)
+    try:
+        users.insert({'username': 'Kenny', 'saltedpw':pwh('321')}, safe=True)
+        print "Error: It seems that I can submit dublicates to the db."
+    except DuplicateKeyError, e:
+        print "Ok, dublicates not allowed in db."
     print
     print "These are the entries now in the user database"
     usr_sel = users.find()

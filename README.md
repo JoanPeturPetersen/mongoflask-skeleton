@@ -1,6 +1,8 @@
 mongoflask-skeleton
 ===================
 
+NOTE: Not secure at the moment - working on the admin interface.
+
 A code skeleton for starting a flask web page with login/sessions using MongodDB as database for the users.
 
 Still work in progress, does not work fully yet...
@@ -22,6 +24,7 @@ Features
 * Limits number of login tries with a defined duration, as to prevent automatic password guessing.
 * Supports multiple secrets, so that one user might log in from several devices at once.
 * Long session secrets stored on server side to prevent session stealing by guessing session secret/key.
+* Secure redirect back to page requiring login.
 
 Missing features
 ----------------

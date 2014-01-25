@@ -1,0 +1,4 @@
+
+Welcome!
+
+Please activate your account by following this link: {{ activation.link }}.

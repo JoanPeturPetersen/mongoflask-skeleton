@@ -13,22 +13,33 @@ from flask import redirect
 from flask.ext.login import LoginManager, login_user, logout_user
 from flask.ext.login import UserMixin, current_user, login_required
 from pymongo import Connection
-#from werkzeug.security import generate_password_hash
+from pymongo.errors import DuplicateKeyError
+from werkzeug.security import generate_password_hash
 from werkzeug.security import check_password_hash 
 import random, string
 import datetime     
 from flask import flash, url_for
 from urlparse import urljoin
-from forms import LoginForm
-from forms import RECAPTCHA_Form
+from forms import LoginForm, RECAPTCHA_Form, RegisterForm
 from flask import session
+from flask.ext.mail import Mail, Message
+from copy import copy
 
 # Application settings:
 app = Flask(__name__)
 app.secret_key = 'CHANGE ME'  # Set the secret key, it is also used by
                               # LoginManager.
 app.debug = True              # Set False before deployment
- 
+DEBUG = True 
+
+app.config.update(
+        MAIL_SERVER='smtp.gmail.com',
+        MAIL_PORT=465,
+        MAIL_USE_SSL=True,
+        MAIL_USERNAME='',
+        MAIL_PASSWORD='',
+        MAIL_SENTFROM='',)
+mail = Mail(app)
 
 # Login manager settings:
 login_manager = LoginManager()  
@@ -45,11 +56,9 @@ users = db.users
 # Session config:
 max_session_releases = 3  # Maximum number of valid secrets per user
 max_secret_age_hours = 24.0  # Time for an secret to expire
-min_login_retry_dur = 10  # Minimum time that must pass before a new
-                          # attampt.
-
-# Misc:
-DEBUG = True
+max_password_guesses = 3  # Maximum number of password guesses within
+                          # `password_window` minutes.
+password_window = 15      #
 
 # reCAPTCHA setting:
 ENABLE_RECAPTCHA = True  # If true, then the user will be taken to a
@@ -70,7 +79,6 @@ class User(UserMixin):
         self.name, self.secret = id.split("#")
 
     def is_active(self):
-        print self.id
         return True
 
 def check_password(user_doc, password):
@@ -78,6 +86,9 @@ def check_password(user_doc, password):
       
 
 def render(*args, **kwargs):
+    if 'user' in kwargs:
+        raise Exception('Sorry, I already use this keyword for the ' + \
+        'current user.')
     kwargs['user'] = current_user.__dict__
     return render_template(*args, **kwargs)
 
@@ -95,7 +106,6 @@ def load_user(public_id):
         return None  # Public id is not valid
     username, secret = split_pid
     user = users.find_one({u"username": username})
-    print user
     if not user.has_key('secrets'):
         return None
     secrets = user['secrets']
@@ -148,12 +158,13 @@ def generate_public_userid(user_doc):
     return public_id
 
 
-def do_login_user(user_doc, password):
+def do_login_user(user_doc, password, skip_password=False):
     """
     Returns true if user is successfully logged in.
     """
-    if not check_password(user_doc, password):
-        return False
+    if skip_password is False:
+        if not check_password(user_doc, password):
+            return False
     public_userid = generate_public_userid(user_doc)
     user = User(public_userid)
     if login_user(user):
@@ -167,15 +178,44 @@ def get_next_url():
     next_url = url_for('index')
     target = session.pop('next', None)
     if target is not None:
-            # Make sure it is on this server
-            next_url = urljoin(request.host_url, target)
-            print "next_url: ", next_url 
+        # Make sure it is on this server
+        next_url = urljoin(request.host_url, target)
     session['next'] = request.args.get('next')
     return next_url
  
 # Routes ----------------------------------------------------------------
 
-                               
+
+def _enough_time_passed(doc):
+    try:
+        last_attempts = doc['last_attempts']
+    except KeyError:
+        last_attempts = []
+        users.update({u'username': doc[u'username']},
+                {'$set': {'last_attempts': last_attempts}})
+    count_within_window = 0
+    too_old = []
+    for attempt in last_attempts:
+        if attempt + datetime.timedelta(seconds=password_window * 60) \
+                > datetime.datetime.utcnow():     
+                    count_within_window += 1
+        else:
+            too_old.append(attempt)  # Outside window
+    # Don't store more than neccesary:
+    sorted_attempts = sorted(last_attempts)
+    too_old = list(set(sorted_attempts[:-max_password_guesses]) | set(too_old))
+    # Remove old entries:
+    if DEBUG:
+        print "Removing old login attempts:", too_old
+    if too_old:
+        users.update({u'username': doc[u'username']},
+                {'$pullAll': {u'last_attempts': too_old}})
+    return count_within_window + 1 <= max_password_guesses
+
+def _add_login_attempt(user_doc):
+    users.update({u'username': user_doc[u'username']},
+            {'$push': {'last_attempts': datetime.datetime.utcnow()}})
+
 @app.route('/login', methods=['GET', 'POST'])
 def login_wtf():
     next_url = get_next_url()
@@ -192,12 +232,8 @@ def login_wtf():
         user_doc = users.find_one({"username": username})
         if not user_doc is None:
             # Make sure enough time has passed:
-            last_attempt = None
-            if user_doc.has_key('last_attempt'):
-                last_attempt = user_doc['last_attempt']
-            if (last_attempt is not None) and (not is_cap):
-                if last_attempt + datetime.timedelta(seconds=
-                    min_login_retry_dur) > datetime.datetime.utcnow():
+            if not is_cap:
+                if not _enough_time_passed(user_doc):
                     if ENABLE_RECAPTCHA:
                         capform = RECAPTCHA_Form()
                         capform.username.data = username
@@ -206,8 +242,7 @@ def login_wtf():
                     else:
                         flash('Please wait a while...')
                         return redirect(url_for('login'))
-            users.update({u'username': username}, {"$set":
-                {"last_attempt": datetime.datetime.utcnow()}})
+            _add_login_attempt(user_doc)
             if do_login_user(user_doc, password):
                 return redirect(next_url)
             else:
@@ -243,8 +278,87 @@ def logout():
                     current_user.name) 
     logout_user()
     return redirect('/')
- 
+         
+def flash_errors(form):
+    for field, errors in form.errors.items():
+        for error in errors:
+            flash(u"Error in the '%s' field - '%s'" % (
+                getattr(form, field).label.text,
+                error
+            ))
 
+
+class UserAlreadyExists(Exception):
+    pass
+
+def add_user(data, activate=False):
+    """Add a user to the user database.
+    All data fields from the form are saved, so if you add a new field in
+    the registration form it will be saved to the user record.
+    The 'password' field is however salted.
+    This methods only adds the user, if the username does not already exist.
+    """
+    data = copy(data)
+    # Salt password:
+    data['password'] = generate_password_hash(data['password'])
+    # Creation date for user:
+    data['created'] = datetime.datetime.utcnow() 
+    # If not active, generate a activation secret:
+    data['activation_secret'] = generate_secret()
+    data['active'] = False
+    try:
+        users.insert(data, safe=True)
+    except DuplicateKeyError:
+        raise UserAlreadyExists('User already exists')
+    return data
+
+def send_registration_mail(data):
+    """Sends an activation mail when a new user has registered.
+    """
+    msg = Message(
+          'Hello',
+           sender=app.config['MAIL_SENTFROM'],
+           recipients=['joanpeturpetersen@gmail.com'])
+    activation = {'link': url_for('activate', username=data['username'],
+        activation_secret=data['activation_secret'], _external=True)}
+    msg.body = render('activation_email.txt', activation=activation)
+    mail.send(msg)
+
+@app.route('/register/activate')
+def activate():
+    """We'll log the user in after activation, so it is important that
+    we check that it is a user that needs to be activated, so we don't
+    open a hole for attacker.
+    """
+    username = request.args.get('username')
+    activation_secret = request.args.get('activation_secret')
+    user = users.find_one({u'username': username})
+    # Make sure that the user is not already activated
+    if ('active' not in user) or not user['active']==False:
+        return "User already activated."
+    # Check if secret is ok:
+    if user['activation_secret'] == activation_secret:
+        # Activate user:
+        act = {'active': True, 'activation': datetime.datetime.utcnow()}
+        users.update({'username': username}, {'$set': act}, upsert=False)
+        do_login_user(user, "", skip_password=True)
+        return "AS ok."
+    else:
+        return "AS not ok."
+    
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegisterForm()
+    if form.validate_on_submit():
+        data = add_user(form.data)
+        send_registration_mail(data)
+        return render('register_confirm.html', form=form)
+    else:
+        flash_errors(form)
+    return render('register.html', form=form)
+
+# Example of page requiring a logged in user. User will asked to login
+# and then taken back here.
 @app.route('/loginreq')
 @login_required
 def login_req():
@@ -253,6 +367,14 @@ def login_req():
     """
     return render('login_req.html')
 
+@app.route('/admin/viewuser')
+def view_user():
+    if not current_user.is_authenticated() \
+            or not current_user.name=='Stan':
+        return app.login_manager.unauthorized()
+    userinfo = users.find_one({u'username': request.args.get('user')})     
+    return render('showall.html', userinfo=userinfo)
+    #return str(user)
 
 @app.route('/')
 def index():
