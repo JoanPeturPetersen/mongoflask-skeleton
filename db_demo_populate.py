@@ -1,7 +1,8 @@
-from pymongo import Connection
+from pymongo import MongoClient
 from pymongo import ASCENDING
 from pymongo.errors import DuplicateKeyError
 from werkzeug.security import generate_password_hash as pwh
+from prepare_db import prepare_db
 import sys
 
 desc = """WARNING: This will delete all users in the 'user_database',
@@ -16,13 +17,14 @@ if __name__=='__main__':
     if not(len(sys.argv)==2) or not(sys.argv[-1]=='GO'):
         print desc
         sys.exit(0)
-    con = Connection()
-    db = con.user_database
+    mongo_client = MongoClient()
+    db = mongo_client.user_database
     users = db.users
 
     # Delete all users
     users.drop()
-    users.ensure_index( [("username", ASCENDING)], unique=True )
+    prepare_db(mongo_client)
+    users.ensure_index([("username", ASCENDING)], unique=True)
     #unique:true, dropDups : true
     users.insert({'username': 'Stan', 'saltedpw':pwh('123')}, safe=True)
     users.insert({'username': 'Kyle', 'saltedpw':pwh('123')}, safe=True)

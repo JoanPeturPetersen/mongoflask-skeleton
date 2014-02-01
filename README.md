@@ -3,6 +3,8 @@ mongoflask-skeleton
 
 NOTE: Not secure at the moment - working on the admin interface.
 
+There are notes in the code on what to secure before deployment. For example remember to change the `admin` password. At some point a list of points will be made.
+
 A code skeleton for starting a flask web page with login/sessions using MongodDB as database for the users.
 
 Still work in progress, does not work fully yet...
