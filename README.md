@@ -27,6 +27,7 @@ Features
 * Supports multiple secrets, so that one user might log in from several devices at once.
 * Long session secrets stored on server side to prevent session stealing by guessing session secret/key.
 * Secure redirect back to page requiring login.
+* Email registration with activation mail
 
 Missing features
 ----------------
