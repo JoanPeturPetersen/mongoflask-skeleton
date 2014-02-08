@@ -1,3 +1,8 @@
+"""
+    Prepares the database with an index on `username` and adds an
+    administrator account.
+"""
+
 from pymongo import MongoClient
 from pymongo import ASCENDING
 from werkzeug.security import generate_password_hash as pwh

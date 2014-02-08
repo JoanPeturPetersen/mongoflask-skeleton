@@ -21,6 +21,7 @@ import datetime
 from flask import flash, url_for
 from urlparse import urljoin
 from forms import LoginForm, RECAPTCHA_Form, RegisterForm
+from forms import ForgotPasswordForm
 from flask import session
 from flask.ext.mail import Mail, Message
 from copy import copy
@@ -169,10 +170,13 @@ def do_login_user(user_doc, password, skip_password=False):
     user = User(public_userid)
     if login_user(user):
         print "Logged in user: " + public_userid
+        users.update({u'username': user_doc[u'username']},
+            {'$set': {'last-login': datetime.datetime.utcnow()}})
         return True
     else:
         print "Failed to login user: " + public_userid
         return False
+
 
 def get_next_url():
     next_url = url_for('index')
@@ -182,8 +186,6 @@ def get_next_url():
         next_url = urljoin(request.host_url, target)
     session['next'] = request.args.get('next')
     return next_url
- 
-# Routes ----------------------------------------------------------------
 
 
 def _enough_time_passed(doc):
@@ -215,6 +217,55 @@ def _enough_time_passed(doc):
 def _add_login_attempt(user_doc):
     users.update({u'username': user_doc[u'username']},
             {'$push': {'last_attempts': datetime.datetime.utcnow()}})
+
+
+class UserAlreadyExists(Exception):
+    pass
+
+
+def add_user(data, activate=False):
+    """Add a user to the user database.
+    All data fields from the form are saved, so if you add a new field in
+    the registration form it will be saved to the user record.
+    The 'password' field is however salted.
+    This methods only adds the user, if the username does not already exist.
+    """
+    data = copy(data)
+    # Salt password:
+    data['password'] = generate_password_hash(data['password'])
+    # Creation date for user:
+    data['created'] = datetime.datetime.utcnow() 
+    # If not active, generate a activation secret:
+    data['activation_secret'] = generate_secret()
+    data['active'] = False
+    try:
+        users.insert(data, safe=True)
+    except DuplicateKeyError:
+        raise UserAlreadyExists('User already exists')
+    return data
+
+
+def send_registration_mail(data):
+    """Sends an activation mail when a new user has registered.
+    """
+    msg = Message(
+          'Hello',
+           sender=app.config['MAIL_SENTFROM'],
+           recipients=['joanpeturpetersen@gmail.com'])
+    activation = {'link': url_for('activate', username=data['username'],
+        activation_secret=data['activation_secret'], _external=True)}
+    msg.body = render('activation_email.txt', activation=activation)
+    mail.send(msg)
+ 
+
+# Routes ----------------------------------------------------------------
+
+
+@app.route('/login/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    form = ForgotPasswordForm()
+    return render('forgot_password.html', form=form)
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login_wtf():
@@ -288,42 +339,6 @@ def flash_errors(form):
             ))
 
 
-class UserAlreadyExists(Exception):
-    pass
-
-def add_user(data, activate=False):
-    """Add a user to the user database.
-    All data fields from the form are saved, so if you add a new field in
-    the registration form it will be saved to the user record.
-    The 'password' field is however salted.
-    This methods only adds the user, if the username does not already exist.
-    """
-    data = copy(data)
-    # Salt password:
-    data['password'] = generate_password_hash(data['password'])
-    # Creation date for user:
-    data['created'] = datetime.datetime.utcnow() 
-    # If not active, generate a activation secret:
-    data['activation_secret'] = generate_secret()
-    data['active'] = False
-    try:
-        users.insert(data, safe=True)
-    except DuplicateKeyError:
-        raise UserAlreadyExists('User already exists')
-    return data
-
-def send_registration_mail(data):
-    """Sends an activation mail when a new user has registered.
-    """
-    msg = Message(
-          'Hello',
-           sender=app.config['MAIL_SENTFROM'],
-           recipients=['joanpeturpetersen@gmail.com'])
-    activation = {'link': url_for('activate', username=data['username'],
-        activation_secret=data['activation_secret'], _external=True)}
-    msg.body = render('activation_email.txt', activation=activation)
-    mail.send(msg)
-
 @app.route('/register/activate')
 def activate():
     """We'll log the user in after activation, so it is important that
@@ -345,7 +360,8 @@ def activate():
         return "AS ok."
     else:
         return "AS not ok."
-    
+
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegisterForm()
@@ -357,6 +373,7 @@ def register():
         flash_errors(form)
     return render('register.html', form=form)
 
+
 # Example of page requiring a logged in user. User will asked to login
 # and then taken back here.
 @app.route('/loginreq')
@@ -367,14 +384,16 @@ def login_req():
     """
     return render('login_req.html')
 
+
 @app.route('/admin/viewuser')
 def view_user():
     if not current_user.is_authenticated() \
-            or not current_user.name=='Stan':
+            or not current_user.name == 'admin':
         return app.login_manager.unauthorized()
     userinfo = users.find_one({u'username': request.args.get('user')})     
     return render('showall.html', userinfo=userinfo)
     #return str(user)
+
 
 @app.route('/')
 def index():

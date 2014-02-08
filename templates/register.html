@@ -16,7 +16,7 @@
   <form method="POST" action="">
       {{ form.hidden_tag() }}
       <p>{{ form.username.label }} {{ form.username(size=20) }}</p>
-      <p>{{ form.email.label }} {{ form.email(size=20) }}</p>
+      <p>{{ form.email.label }} {{ form.email(size=50) }}</p>
       <p>{{ form.password.label }} {{ form.password(size=20) }}</p>
       <p>{{ form.conf_password.label }} {{ form.conf_password(size=20) }}</p>
       <p>{{ form.accept_rules.label }} {{ form.accept_rules() }}</p>
